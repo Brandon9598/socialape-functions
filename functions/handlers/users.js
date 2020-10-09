@@ -8,6 +8,7 @@ firebase.initializeApp(config);
 const {
   validateSignupData,
   validateLoginData,
+  reduceUserDetails,
 } = require("../utils/validators");
 
 exports.signup = (req, res) => {
@@ -95,7 +96,24 @@ exports.login = (req, res) => {
     });
 };
 
+// Add user details
+exports.addUserDetails = (req, res) => {
+  let userDetails = reduceUserDetails(req.body);
+
+  db.doc(`/users/${req.user.handle}`)
+    .update(userDetails)
+    .then(() => {
+      return res.json({ message: "Details added successfully" });
+    })
+    .catch((err) => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
+};
+
+// Upload a profile image for user
 exports.uploadImage = (req, res) => {
+  console.log(req.user);
   const BusBoy = require("busboy");
   const path = require("path");
   const os = require("os");
@@ -107,6 +125,9 @@ exports.uploadImage = (req, res) => {
   let imageToBeUploaded = {};
 
   busboy.on("file", (fieldname, file, filename, encoding, mimetype) => {
+    if (mimetype !== "image/jpeg" && mimet !== "image/png") {
+      return res.status(400).json({ error: "Wrong filetype submitted" });
+    }
     console.log(fieldname);
     console.log(filename);
     console.log(mimetype);
@@ -144,4 +165,33 @@ exports.uploadImage = (req, res) => {
         return res.status(500).json({ error: err.code });
       });
   });
+
+  busboy.end(req.rawBody);
+};
+
+// Get own user details
+exports.getAuthenticatedUser = (req, res) => {
+  let userData = {};
+  db.doc(`/users/${req.user.handle}`)
+    .get()
+    .then((doc) => {
+      if (doc.exists) {
+        userData.credentials = doc.data();
+        return db
+          .collection("likes")
+          .where("userHandle", "==", req.user.handle)
+          .get();
+      }
+    })
+    .then((data) => {
+      userData.likes = [];
+      data.forEach((doc) => {
+        userData.likes.push(doc.data());
+      });
+      return res.json(userData);
+    })
+    .catch((err) => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
 };
